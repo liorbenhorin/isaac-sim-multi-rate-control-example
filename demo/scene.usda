@@ -16,7 +16,7 @@ def Xform "World"
         variants = {
             string Configuration = "No_Internals"
             string Physics = "physx"
-            string ROS = "Disabled"
+            string ROS = "Enabled"
             string Sensors = "None"
         }
     )
@@ -24,6 +24,8 @@ def Xform "World"
         over "chassis_link"
         {
             double3 xformOp:translate = (0, 0, 0.025)
+            # Disable stock sensor branches; our camera and IMU are direct children below.
+            over "sensors" (active = false) {}
 
             # Camera looks forward along Carter's +X, tilted slightly toward the ground.
             def Camera "FrontCamera" (
@@ -52,6 +54,42 @@ def Xform "World"
                 int orientationFilterWidth = 1
                 double3 xformOp:translate = (0, 0, 0.2)
                 uniform token[] xformOpOrder = ["xformOp:translate"]
+            }
+        }
+
+        # Reuse Carter's shipped ROS graphs, without odometry/TF or stock sensors.
+        over "transform_tree_odometry" (active = false) {}
+        over "differential_drive"
+        {
+            over "ros2_subscribe_twist"
+            {
+                custom string inputs:topicName = "cmd_vel"
+            }
+        }
+        over "chassis_imu"
+        {
+            token pipelineStage = "pipelineStageOnDemand"
+            over "on_playback_tick" (active = false) {}
+            def OmniGraphNode "tick" (
+                prepend apiSchemas = ["NodeGraphNodeAPI"]
+            )
+            {
+                token node:type = "omni.graph.action.OnImpulseEvent"
+                int node:typeVersion = 1
+            }
+            over "isaac_read_imu_node"
+            {
+                custom rel inputs:imuPrim = </World/Carter/chassis_link/IMU>
+                custom uint inputs:execIn.connect = </World/Carter/chassis_imu/tick.outputs:execOut>
+            }
+            over "ros2_publish_imu"
+            {
+                custom string inputs:frameId = "carter_imu"
+                custom double inputs:timeStamp.connect = </World/Carter/chassis_imu/isaac_read_imu_node.outputs:sensorTime>
+            }
+            over "ros2_qos_profile"
+            {
+                custom uint64 inputs:depth = 100
             }
         }
     }
