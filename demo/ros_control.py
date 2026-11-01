@@ -50,10 +50,11 @@ class CarterControl(Node):
                 self.axes[number] = value
         command = Twist()
         throttle, steering = -stick(self.axes[1]), -stick(self.axes[0])
-        command.linear.x = 2.0 * throttle * (1.0 - 0.5 * abs(steering))
-        # Steering sets curvature (1/radius), so yaw falls with speed instead of becoming a pivot.
-        # Full steering: 2 m radius; straight full throttle: 2 m/s. Reverse steers like a car.
-        command.angular.z = command.linear.x * steering * abs(steering) / 2.0
+        command.linear.x = 2.0 * throttle
+        # Throttle demand reduces steering authority: 1.2 rad/s stopped, 0.2 rad/s at full throttle.
+        # At 2 m/s, full steering therefore commands a 10 m radius. Reverse uses the same limit.
+        yaw_limit = 1.2 * (1.0 - abs(throttle)) + 0.2 * abs(throttle)
+        command.angular.z = yaw_limit * steering * abs(steering)
         self.publisher.publish(command)
 
     def read_imu(self, message):

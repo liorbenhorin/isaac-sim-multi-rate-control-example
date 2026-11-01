@@ -55,12 +55,14 @@ Run each command in its own terminal. `./run.sh --no-window` runs Isaac without 
 
 Carter starts stationary. Connect your gamepad through the Brev desktop's joystick forwarding, then run `./control.sh` (either on the desktop or over SSH). Isaac can stay headless. The launcher sets the Selkies runtime directory and input interposer so Python can read `/dev/input/js0`; no additional gamepad packages are needed.
 
-- **Left stick up/down:** forward/reverse, up to 2 m/s when driving straight.
-- **Left stick left/right:** steering controls turn radius, down to 2 m at full steering, with a softer response near center. Speed falls to at most 1 m/s at full steering. Turn rate follows forward/reverse speed: sideways stick alone does not spin the robot, and reverse steers like a car. No enable button is required.
+- **Left stick up/down:** forward/reverse, up to 2 m/s; steering does not reduce the throttle command.
+- **Left stick left/right:** turn in place at up to 1.2 rad/s with zero throttle. The turn-rate limit decreases linearly with absolute throttle demand: 0.7 rad/s at half throttle and 0.2 rad/s at full throttle (a commanded 10 m minimum radius at 2 m/s). Steering is softer near center. Left always commands positive yaw, including in reverse. No enable button is required.
 - **Center the stick:** stop. A 10% dead zone ignores stick drift.
 - **Ctrl+C:** send a stop command and exit.
 
 Selkies presents the DualSense as a Microsoft Xbox 360 pad: left-stick axes 0/1; buttons are unused. The gamepad mappings and command limits are in `demo/ros_control.py`; `demo/scene.usda` also sets the shipped differential controller’s linear speed limit to 2 m/s. Commands publish at 20 Hz; IMU acceleration, yaw rate and received sample rate print every five seconds. The sample rate uses wall time, so it falls below 300 Hz when simulation runs slower than real time.
+
+This is a custom joystick response curve based on throttle demand, not measured vehicle speed. Isaac’s shipped differential-drive graph still converts `/cmd_vel` to wheel velocities and applies its acceleration limits.
 
 The controller stops on joystick read errors or end-of-stream. Desktop/browser disconnect behavior depends on Selkies forwarding release events; joystick silence alone is not a disconnect signal because a held stick need not emit new events.
 
