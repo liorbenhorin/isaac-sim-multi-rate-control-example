@@ -34,6 +34,8 @@ The shipped IMU graph is retargeted to our sensor and publishes **`/chassis/imu`
 
 `demo/carter_demo.py` creates/configures physics, runs ten physics ticks per render, and streams the camera using Isaac's RTSP writer. `demo/ros_control.py` is the separate ROS controller/subscriber. Physics configuration stays in Python; static scene and bridge wiring stay in USD. The 300/30 Hz rates are in simulation time; wall-clock sleep targets real time, but computation can make the simulator run slower.
 
+The RTSP camera uses a native OpenCV fisheye projection (approximately 159° horizontal field of view). It sits 1 m behind and 1.3 m above the chassis origin, tilted 30° downward, so Carter and the track ahead are visible together. Lens intrinsics are authored for 1280 × 720 in `demo/scene.usda`. The camera follows the chassis through its USD parent transform.
+
 The GUI viewpoint remains freely navigable. The RTSP viewer reports FPS/jitter every five seconds. To view the remote camera locally, keep this tunnel open and use the original local viewer:
 
 ```bash
