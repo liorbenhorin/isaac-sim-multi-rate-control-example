@@ -21,6 +21,7 @@ def Xform "World"
         }
     )
     {
+        double3 xformOp:translate = (4, 0, 0)
         over "chassis_link"
         {
             double3 xformOp:translate = (0, 0, 0.025)
@@ -94,46 +95,9 @@ def Xform "World"
         }
     }
 
-    def Xform "Ground"
-    {
-        # PhysX treats this as an infinite collision plane.
-        def Plane "collisionPlane" (
-            prepend apiSchemas = ["PhysicsCollisionAPI"]
-        )
-        {
-            uniform token axis = "Z"
-            uniform token purpose = "guide"
-        }
-
-        # Finite visual mesh, recentered by Python as Carter travels.
-        def Mesh "geom" (
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            uniform bool doubleSided = true
-            uniform token subdivisionScheme = "none"
-            int[] faceVertexCounts = [4]
-            int[] faceVertexIndices = [0, 1, 2, 3]
-            point3f[] points = [(-1000, -1000, 0), (1000, -1000, 0), (1000, 1000, 0), (-1000, 1000, 0)]
-            rel material:binding = </World/Ground/GridMaterial>
-            double3 xformOp:translate = (0, 0, 0)
-            uniform token[] xformOpOrder = ["xformOp:translate"]
-        }
-
-        def Material "GridMaterial"
-        {
-            token outputs:mdl:surface.connect = </World/Ground/GridMaterial/Shader.outputs:out>
-            def Shader "Shader"
-            {
-                uniform token info:implementationSource = "sourceAsset"
-                uniform asset info:mdl:sourceAsset = @OmniPBR.mdl@
-                uniform token info:mdl:sourceAsset:subIdentifier = "OmniPBR"
-                asset inputs:diffuse_texture = @wireframe-blue.png@
-                bool inputs:project_uvw = true
-                token outputs:out
-            }
-        }
-    }
+    def Xform "Track" (
+        prepend references = @track.usda@
+    ) {}
 
     def DomeLight "Light"
     {

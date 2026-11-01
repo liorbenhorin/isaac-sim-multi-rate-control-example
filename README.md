@@ -40,4 +40,4 @@ ssh -N -L 8555:localhost:8554 nvidia-accelerated-desktop---robotics-a223e8
 ./view.sh rtsp://localhost:8555/stream
 ```
 
-The first launch downloads the referenced Carter asset. The bundled `demo/wireframe-blue.png` is Isaac Sim's ground texture. The ground collision plane is infinite; Python recenters its finite visual mesh as Carter moves.
+The first launch downloads the referenced Carter asset. `demo/track.usda` is a fixed, untextured 20 × 16 m circuit with a 2.4 m lane and continuous red/white barriers, 0.8 m high and 0.22 m thick. The floor and barrier blocks have static collision geometry. Carter starts on the straight facing the checkerboard; holding forward eventually drives it into a barrier. The main loop no longer reads the robot pose or moves the ground.

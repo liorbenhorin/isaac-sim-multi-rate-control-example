@@ -32,18 +32,14 @@ import omni.graph.core as og
 import omni.replicator.core as rep
 import omni.timeline
 import omni.usd
-from isaacsim.core.experimental.prims import Articulation
 from isaacsim.core.rendering_manager import RenderingManager
 from isaacsim.core.simulation_manager import SimulationEvent, SimulationManager
 from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.streaming.rtsp import RTSPStreamWriter
 from isaacsim.streaming.rtsp.impl.render_var_utils import ensure_render_var_on_product
-from pxr import Gf
 
 # The scene already contains the robot, camera and IMU.
 stage = omni.usd.get_context().get_stage()
-robot = Articulation("/World/Carter")
-ground_offset = stage.GetPrimAtPath("/World/Ground/geom").GetAttribute("xformOp:translate")
 
 # Explicit stepping: rendering/app updates must not advance physics automatically.
 settings = carb.settings.get_settings()
@@ -65,7 +61,7 @@ writer.attach([render_product.path])
 timeline.play()
 timeline.commit()
 SimulationManager.initialize_physics()
-set_camera_view(eye=[-4, -4, 3], target=[1, 0, 0.5])  # Set once; GUI navigation stays free.
+set_camera_view(eye=[24, -22, 25], target=[8, 6, 0])  # Set once; GUI navigation stays free.
 
 # Run the shipped IMU bridge graph after the sensor backend updates each physics tick.
 imu_graph = og.get_graph_by_path("/World/Carter/chassis_imu")
@@ -86,8 +82,6 @@ try:
             if SimulationManager.get_physics_simulation_view() is None:
                 SimulationManager.initialize_physics()
             SimulationManager.step(steps=PHYSICS_HZ // CAMERA_HZ)  # 10 physics ticks; no rendering.
-            position = robot.get_world_poses()[0].numpy()[0]
-            ground_offset.Set(Gf.Vec3d(float(position[0] // 2 * 2), float(position[1] // 2 * 2), 0))
         RenderingManager.render()  # One render; also services GUI input.
         time.sleep(max(0, 1 / CAMERA_HZ - (time.monotonic() - started)))  # Wall-clock pacing.
 except KeyboardInterrupt:
