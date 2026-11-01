@@ -50,9 +50,9 @@ class CarterControl(Node):
                 self.axes[number] = value
         command = Twist()
         throttle, steering = -stick(self.axes[1]), -stick(self.axes[0])
-        command.linear.x = 2.0 * throttle
+        command.linear.x = throttle  # Carter's shipped maximum: 1 m/s.
         # Throttle demand reduces steering authority: 1.2 rad/s stopped, 0.2 rad/s at full throttle.
-        # At 2 m/s, full steering therefore commands a 10 m radius. Reverse uses the same limit.
+        # At 1 m/s, full steering therefore commands a 5 m radius. Reverse uses the same limit.
         yaw_limit = 1.2 * (1.0 - abs(throttle)) + 0.2 * abs(throttle)
         command.angular.z = yaw_limit * steering * abs(steering)
         self.publisher.publish(command)
