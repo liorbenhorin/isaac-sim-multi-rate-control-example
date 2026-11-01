@@ -28,8 +28,8 @@ Run each command in its own terminal. `./run.sh --no-window` runs Isaac without 
 Carter starts stationary. Connect your gamepad through the Brev desktop's joystick forwarding, then run `./control.sh` (either on the desktop or over SSH). Isaac can stay headless. The launcher sets the Selkies runtime directory and input interposer so Python can read `/dev/input/js0`; no additional gamepad packages are needed.
 
 - **Hold L1 / left bumper:** enable driving; release it to stop.
-- **Left stick up/down:** forward/reverse, up to 2 m/s.
-- **Left stick left/right:** turn left/right, up to 1.2 rad/s; turning in place also works.
+- **Left stick up/down:** forward/reverse, up to 2 m/s when driving straight.
+- **Left stick left/right:** turn left/right, with a softer response near center, up to 1.2 rad/s. Steering progressively reduces the forward/reverse speed limit to 0.5 m/s at full steering; turning in place also works.
 - **Center the stick:** stop. A 10% dead zone ignores stick drift.
 - **Ctrl+C:** send a stop command and exit.
 

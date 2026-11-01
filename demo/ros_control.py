@@ -53,8 +53,10 @@ class CarterControl(Node):
                 self.enabled = bool(value)
         command = Twist()
         if self.enabled:
-            command.linear.x = -stick(self.axes[1]) * 2.0  # Up = forward, max 2 m/s.
-            command.angular.z = -stick(self.axes[0]) * 1.2  # Left = positive yaw.
+            throttle, steering = -stick(self.axes[1]), -stick(self.axes[0])
+            # Slow down in corners; softer steering near center makes small corrections easier.
+            command.linear.x = 2.0 * throttle * (1.0 - 0.75 * abs(steering))
+            command.angular.z = 1.2 * steering * abs(steering)
         self.publisher.publish(command)
 
     def read_imu(self, message):
