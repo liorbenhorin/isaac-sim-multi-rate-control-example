@@ -1,0 +1,8 @@
+.pixi/
+.cache/
+__pycache__/
+*.py[cod]
+outputs/
+*.log
+.env
+.env.*

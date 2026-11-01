@@ -1,0 +1,14 @@
+[workspace]
+name = "multi-rate-control"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[dependencies]
+gstreamer = "*"
+gst-plugins-base = "*"
+gst-plugins-good = "*"
+gst-plugins-bad = "*"
+gst-libav = "*"
+
+[tasks]
+view = "gst-launch-1.0 rtspsrc location=rtsp://localhost:8554/stream protocols=tcp latency=100 ! rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! autovideosink"
