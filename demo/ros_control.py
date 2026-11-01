@@ -26,7 +26,6 @@ class CarterControl(Node):
         super().__init__("carter_control")
         self.joystick = os.open("/dev/input/js0", os.O_RDONLY | os.O_NONBLOCK)
         self.axes = [0, 0]  # Left stick X/Y: native DualSense and Selkies Xbox 360 mapping.
-        self.enabled = False
         self.imu = None
         self.samples = 0
         self.reported_at = time.monotonic()
@@ -49,14 +48,12 @@ class CarterControl(Node):
             kind &= ~0x80  # Initial-state events carry the same axis/button data.
             if kind == 2 and number < 2:
                 self.axes[number] = value
-            elif kind == 1 and number == 4:  # L1 / left bumper: hold to drive.
-                self.enabled = bool(value)
         command = Twist()
-        if self.enabled:
-            throttle, steering = -stick(self.axes[1]), -stick(self.axes[0])
-            # Slow down in corners; softer steering near center makes small corrections easier.
-            command.linear.x = 2.0 * throttle * (1.0 - 0.75 * abs(steering))
-            command.angular.z = 1.2 * steering * abs(steering)
+        throttle, steering = -stick(self.axes[1]), -stick(self.axes[0])
+        command.linear.x = 2.0 * throttle * (1.0 - 0.5 * abs(steering))
+        # Steering sets curvature (1/radius), so yaw falls with speed instead of becoming a pivot.
+        # Full steering: 2 m radius; straight full throttle: 2 m/s. Reverse steers like a car.
+        command.angular.z = command.linear.x * steering * abs(steering) / 2.0
         self.publisher.publish(command)
 
     def read_imu(self, message):
@@ -79,8 +76,8 @@ def main():
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     signal.signal(signal.SIGTERM, signal.default_int_handler)
     node = CarterControl()
-    print("Hold L1 + left stick: up/down = forward/reverse, left/right = turn."
-          " Release L1 to stop. Ctrl+C exits.", flush=True)
+    print("Left stick: up/down = forward/reverse, left/right = steering."
+          " Center the stick to stop. Ctrl+C exits.", flush=True)
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

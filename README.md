@@ -29,7 +29,7 @@ Run these in separate terminals, from this repository:
 ./view.sh
 ```
 
-The local controller reads the USB DualSense directly at `/dev/input/js0` and uses the same L1/left-stick mapping. It does not need Selkies forwarding. The existing `control.sh` remains the Brev launcher.
+The local controller reads the USB DualSense directly at `/dev/input/js0` and uses the same left-stick mapping. It does not need Selkies forwarding. The existing `control.sh` remains the Brev launcher.
 
 ROS debugging commands:
 
@@ -55,13 +55,12 @@ Run each command in its own terminal. `./run.sh --no-window` runs Isaac without 
 
 Carter starts stationary. Connect your gamepad through the Brev desktop's joystick forwarding, then run `./control.sh` (either on the desktop or over SSH). Isaac can stay headless. The launcher sets the Selkies runtime directory and input interposer so Python can read `/dev/input/js0`; no additional gamepad packages are needed.
 
-- **Hold L1 / left bumper:** enable driving; release it to stop.
 - **Left stick up/down:** forward/reverse, up to 2 m/s when driving straight.
-- **Left stick left/right:** turn left/right, with a softer response near center, up to 1.2 rad/s. Steering progressively reduces the forward/reverse speed limit to 0.5 m/s at full steering; turning in place also works.
+- **Left stick left/right:** steering controls turn radius, down to 2 m at full steering, with a softer response near center. Speed falls to at most 1 m/s at full steering. Turn rate follows forward/reverse speed: sideways stick alone does not spin the robot, and reverse steers like a car. No enable button is required.
 - **Center the stick:** stop. A 10% dead zone ignores stick drift.
 - **Ctrl+C:** send a stop command and exit.
 
-Selkies presents the DualSense as a Microsoft Xbox 360 pad: left-stick axes 0/1 and L1 button 4. The gamepad mappings and command limits are in `demo/ros_control.py`; `demo/scene.usda` also sets the shipped differential controller’s linear speed limit to 2 m/s. Commands publish at 20 Hz; IMU acceleration, yaw rate and received sample rate print every five seconds. The sample rate uses wall time, so it falls below 300 Hz when simulation runs slower than real time.
+Selkies presents the DualSense as a Microsoft Xbox 360 pad: left-stick axes 0/1; buttons are unused. The gamepad mappings and command limits are in `demo/ros_control.py`; `demo/scene.usda` also sets the shipped differential controller’s linear speed limit to 2 m/s. Commands publish at 20 Hz; IMU acceleration, yaw rate and received sample rate print every five seconds. The sample rate uses wall time, so it falls below 300 Hz when simulation runs slower than real time.
 
 The controller stops on joystick read errors or end-of-stream. Desktop/browser disconnect behavior depends on Selkies forwarding release events; joystick silence alone is not a disconnect signal because a held stick need not emit new events.
 
