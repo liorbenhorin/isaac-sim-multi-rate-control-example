@@ -13,10 +13,13 @@ SPEED = 0.8  # m/s
 RESOLUTION = (1280, 720)
 
 app = SimulationApp({
+    "open_usd": str(Path(__file__).with_name("scene.usda")),
     "headless": False,
     "multi_gpu": False,
     "renderer": "RaytracedLighting",
     "extra_args": [
+        "--/exts/isaacsim.core.simulation_manager/default_engine=physx",
+        "--/exts/isaacsim.physics.newton/auto_switch_on_startup=false",
         "--enable", "isaacsim.streaming.rtsp",
         "--enable", "isaacsim.sensors.experimental.rtx",
         "--enable", "isaacsim.sensors.experimental.physics",
@@ -28,63 +31,34 @@ import carb.settings
 import omni.replicator.core as rep
 import omni.timeline
 import omni.usd
-from isaacsim.core.experimental.objects import GroundPlane
 from isaacsim.core.experimental.prims import Articulation
 from isaacsim.core.rendering_manager import RenderingManager
 from isaacsim.core.simulation_manager import SimulationEvent, SimulationManager
 from isaacsim.core.utils.viewports import set_camera_view
-from isaacsim.sensors.experimental.physics import IMU, IMUSensor
-from isaacsim.sensors.experimental.rtx import RtxCamera
+from isaacsim.sensors.experimental.physics import IMUSensor
 from isaacsim.streaming.rtsp import RTSPStreamWriter
 from isaacsim.streaming.rtsp.impl.render_var_utils import ensure_render_var_on_product
-from pxr import Gf, UsdGeom, UsdLux, UsdPhysics
+from pxr import Gf
 
-# Scene: the USD overlay selects Sensors=None before loading the robot.
-omni.usd.get_context().new_stage()
+# The scene already contains the robot, camera and IMU.
 stage = omni.usd.get_context().get_stage()
-stage.SetDefaultPrim(UsdGeom.Xform.Define(stage, "/World").GetPrim())
-UsdGeom.SetStageMetersPerUnit(stage, 1.0)
-UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
-UsdPhysics.Scene.Define(stage, "/World/PhysicsScene")
-SimulationManager.switch_physics_engine("physx")
-robot_prim = stage.DefinePrim("/World/Carter", "Xform")
-robot_prim.GetReferences().AddReference(str(Path(__file__).with_name("nova_carter_light.usda")))
-while omni.usd.get_context().get_stage_loading_status()[2] > 0:
-    app.update()
-robot = Articulation("/World/Carter", positions=[[0, 0, 0.025]])
-ground = GroundPlane("/World/Ground", sizes=2000)
-# Collision is infinite; recenter only the finite, textured visual mesh as Carter moves.
-ground_offset = UsdGeom.Xformable(stage.GetPrimAtPath(ground.meshes.paths[0])).AddTranslateOp(opSuffix="follow")
-UsdLux.DomeLight.Define(stage, "/World/Light").CreateIntensityAttr(1000)
-
-# A forward-facing camera, mounted on the chassis.
-camera_path = "/World/Carter/chassis_link/FrontCamera"
-camera = RtxCamera(camera_path, tick_rate=CAMERA_HZ)
-camera_prim = UsdGeom.Camera(stage.GetPrimAtPath(camera_path))
-camera_prim.CreateFocalLengthAttr(24)
-camera_prim.CreateHorizontalApertureAttr(36)
-camera_prim.CreateVerticalApertureAttr(36 * RESOLUTION[1] / RESOLUTION[0])
-camera_prim.CreateClippingRangeAttr(Gf.Vec2f(0.05, 500))
-camera_xform = UsdGeom.Xformable(camera_prim)
-camera_xform.ClearXformOpOrder()
-camera_xform.AddTransformOp().Set(
-    Gf.Matrix4d().SetLookAt(Gf.Vec3d(0.32, 0, 1.1), Gf.Vec3d(10, 0, 0.5), Gf.Vec3d(0, 0, 1)).GetInverse()
-)
-imu = IMUSensor(IMU.create("/World/Carter/chassis_link/IMU", translations=[[0, 0, 0.2]]))
+robot = Articulation("/World/Carter")
+imu = IMUSensor("/World/Carter/chassis_link/IMU")
+ground_offset = stage.GetPrimAtPath("/World/Ground/geom").GetAttribute("xformOp:translate")
 
 # Explicit stepping: rendering/app updates must not advance physics automatically.
 settings = carb.settings.get_settings()
 settings.set("/app/player/playSimulations", False)
 settings.set("/app/runLoops/main/rateLimitEnabled", False)
 settings.set("/app/viewport/show/camera", False)
+# Create the physics scene and configure its timestep in Python.
 SimulationManager.setup_simulation(dt=1 / PHYSICS_HZ, device="cpu")
 RenderingManager.set_dt(1 / CAMERA_HZ)
 timeline = omni.timeline.get_timeline_interface()
-timeline.set_end_time(1e9)
 timeline.set_looping(False)
 
 # The shipped RTSP writer consumes this camera's H.264 render output.
-render_product = rep.create.render_product(camera_path, RESOLUTION)
+render_product = rep.create.render_product("/World/Carter/chassis_link/FrontCamera", RESOLUTION)
 ensure_render_var_on_product(stage, render_product.path, "LdrColor", "h264")
 writer = RTSPStreamWriter(port=8554, mountPath="/stream", encoding="h264", width=RESOLUTION[0], height=RESOLUTION[1])
 writer.attach([render_product.path])

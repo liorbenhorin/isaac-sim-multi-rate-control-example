@@ -1,0 +1,104 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    startTimeCode = 0
+    endTimeCode = 30000000000
+    timeCodesPerSecond = 30
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "World"
+{
+    # Keep the drive train; exclude the stock sensor suite before composition.
+    def Xform "Carter" (
+        prepend references = @https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.2/Isaac/Robots/NVIDIA/NovaCarter/nova_carter.usd@
+        variants = {
+            string Configuration = "No_Internals"
+            string Physics = "physx"
+            string ROS = "Disabled"
+            string Sensors = "None"
+        }
+    )
+    {
+        over "chassis_link"
+        {
+            double3 xformOp:translate = (0, 0, 0.025)
+
+            # Camera looks forward along Carter's +X, tilted slightly toward the ground.
+            def Camera "FrontCamera" (
+                prepend apiSchemas = ["OmniSensorAPI"]
+            )
+            {
+                float2 clippingRange = (0.05, 500)
+                float focalLength = 24
+                float horizontalAperture = 36
+                float verticalAperture = 20.25
+                float omni:sensor:tickRate = 30
+                matrix4d xformOp:transform = (
+                    (0, -1, 0, 0),
+                    (0.06186474435209876, 0, 0.9980845422138598, 0),
+                    (-0.9980845422138598, 0, 0.06186474435209876, 0),
+                    (0.32, 0, 1.1, 1)
+                )
+                uniform token[] xformOpOrder = ["xformOp:transform"]
+            }
+
+            def IsaacImuSensor "IMU"
+            {
+                bool enabled = true
+                int angularVelocityFilterWidth = 1
+                int linearAccelerationFilterWidth = 1
+                int orientationFilterWidth = 1
+                double3 xformOp:translate = (0, 0, 0.2)
+                uniform token[] xformOpOrder = ["xformOp:translate"]
+            }
+        }
+    }
+
+    def Xform "Ground"
+    {
+        # PhysX treats this as an infinite collision plane.
+        def Plane "collisionPlane" (
+            prepend apiSchemas = ["PhysicsCollisionAPI"]
+        )
+        {
+            uniform token axis = "Z"
+            uniform token purpose = "guide"
+        }
+
+        # Finite visual mesh, recentered by Python as Carter travels.
+        def Mesh "geom" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform bool doubleSided = true
+            uniform token subdivisionScheme = "none"
+            int[] faceVertexCounts = [4]
+            int[] faceVertexIndices = [0, 1, 2, 3]
+            point3f[] points = [(-1000, -1000, 0), (1000, -1000, 0), (1000, 1000, 0), (-1000, 1000, 0)]
+            rel material:binding = </World/Ground/GridMaterial>
+            double3 xformOp:translate = (0, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+        }
+
+        def Material "GridMaterial"
+        {
+            token outputs:mdl:surface.connect = </World/Ground/GridMaterial/Shader.outputs:out>
+            def Shader "Shader"
+            {
+                uniform token info:implementationSource = "sourceAsset"
+                uniform asset info:mdl:sourceAsset = @OmniPBR.mdl@
+                uniform token info:mdl:sourceAsset:subIdentifier = "OmniPBR"
+                asset inputs:diffuse_texture = @wireframe-blue.png@
+                bool inputs:project_uvw = true
+                token outputs:out
+            }
+        }
+    }
+
+    def DomeLight "Light"
+    {
+        float inputs:intensity = 1000
+    }
+}

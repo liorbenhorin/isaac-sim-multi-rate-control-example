@@ -1,6 +1,6 @@
 # Multi-rate Carter
 
-A minimal standalone Isaac Sim 6.2 example: Nova Carter drives forward on an infinite collision plane with **300 Hz physics/IMU** and a **30 Hz camera streaming over RTSP**. The robot's USD overlay disables its stock sensors; the script adds one camera and one IMU.
+A minimal standalone Isaac Sim 6.2 example: Nova Carter drives forward on an infinite collision plane with **300 Hz physics/IMU** and a **30 Hz camera streaming over RTSP**. `demo/scene.usda` contains the environment and a robot variant with its stock sensors disabled, plus one camera and one IMU.
 
 ## Run
 
@@ -16,9 +16,9 @@ The launcher uses the adjacent `../IsaacSim` source build locally, or `~/robotic
 /path/to/isaacsim/.venv/bin/python demo/carter_demo.py
 ```
 
-Isaac's standard `--no-window` option runs without a GUI. The first launch downloads the referenced Nova Carter asset. Change the constants at the top of `demo/carter_demo.py` to adjust rates, speed or resolution; the physics rate should be a multiple of the camera rate.
+Isaac's standard `--no-window` option runs without a GUI. The first launch downloads the referenced Nova Carter asset. Python constants set the physics/render rates, speed and resolution; camera pose and sensor tick rate live in `demo/scene.usda`. This example uses ten physics ticks per render.
 
-In a second terminal:
+Once the simulation is producing frames, in a second terminal:
 
 ```bash
 ./view.sh
@@ -34,7 +34,7 @@ ssh -N -L 8555:localhost:8554 nvidia-accelerated-desktop---robotics-a223e8
 
 ## Read the example
 
-[`demo/carter_demo.py`](demo/carter_demo.py) is the entire simulator: scene, sensors, stream and main loop. There are no demo-specific command-line options, async tasks, wrapper classes or CSV/JSON reporting.
+[`demo/scene.usda`](demo/scene.usda) holds the robot, infinite ground, lighting and sensor placements. [`demo/carter_demo.py`](demo/carter_demo.py) loads that scene, creates/configures physics, connects the sensors and RTSP writer, then owns the stepping loop. There are no demo-specific command-line options, async tasks, wrapper classes or CSV/JSON reporting.
 
 ```python
 SimulationManager.step(steps=10)  # IMU callback runs after every physics step.
@@ -44,3 +44,5 @@ RenderingManager.render()       # One camera render and GUI update.
 `/app/player/playSimulations=False` disables automatic physics during rendering. Each batch advances simulation time by 1/30 second. The sleep at the end of the loop targets 30 batches per wall-clock second; if computation takes longer, simulation runs slower than real time. Camera `tick_rate` controls its simulation-time cadence; it does not perform rendering by itself.
 
 The textured ground mesh follows Carter so its edge stays out of view; its collision plane is infinite. The GUI viewpoint is set once and remains freely navigable. Close the simulator or press Ctrl+C to exit.
+
+The bundled `demo/wireframe-blue.png` is the ground texture shipped with Isaac Sim’s `isaacsim.core.experimental.objects` extension.
