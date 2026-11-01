@@ -21,6 +21,44 @@ robot instead, use `./run.sh --/carterDemo/follow=true`. The forward camera
 streams H.264 at 1280x720 to `rtsp://localhost:8554/stream` independently of the
 GUI view. `--no-window` makes the simulator headless while preserving rendering.
 
+### Viewer statistics
+
+`./view.sh` prints live receiver statistics once per second while displaying
+the video. It uses Python GStreamer bindings from the project's Pixi environment.
+
+```bash
+# Decode and measure over SSH without a display.
+./view.sh --headless --duration=15
+
+# Measure a forwarded remote stream, reporting every two seconds.
+./view.sh rtsp://localhost:8555/stream --interval=2
+
+# Video only, or change the jitter-buffer target.
+./view.sh --no-stats
+./view.sh --latency-ms=50
+```
+
+| Output | Meaning |
+|---|---|
+| `decoded`, `sink` | Decoded and video-sink frames per receiver wall second; headless sink consumes frames without displaying them |
+| `H264` | Parsed H.264 payload bitrate, excluding network overhead |
+| `gap mean/std/max` | Time between decoded frames in milliseconds; standard deviation describes frame-arrival variability |
+| `idle` | Wall time since the last decoded frame; exposes a stalled stream |
+| `RTP jitter` | GStreamer's smoothed RTP packet jitter estimate, converted to milliseconds |
+| `lost`, `late`, `dup` | Cumulative RTP jitter-buffer packet counters for this connection |
+| `sink drops` | Cumulative video-sink frame-drop counter |
+
+Frame gaps include effects of buffering, decoding, scheduling and downstream
+backpressure; they are not a pure network measurement. RTP jitter is a separate
+packet-level statistic. TCP can recover network packet loss while causing
+delivery stalls, so zero RTP loss does not establish a perfect network path.
+Neither metric measures camera-to-display latency. `--latency-ms` configures a
+buffering target, not a measured end-to-end delay. During startup the sink can
+lag decoding while its queue fills.
+
+Field definitions follow GStreamer's [RTP jitter-buffer statistics](https://gstreamer.freedesktop.org/documentation/rtpmanager/rtpjitterbuffer.html#rtpjitterbuffer:stats)
+and [FPS display sink counters](https://gstreamer.freedesktop.org/documentation/debugutilsbad/fpsdisplaysink.html).
+
 The robot settles for one simulation second, accelerates over two seconds,
 and drives at a target 0.8 m/s through its wheel drives and ground contact.
 The ground collider is infinite; a finite visual ground and 2 m grid recycle
@@ -73,11 +111,12 @@ messages and nonzero camera FPS before connecting the viewer.
 
 `run.sh` detects the existing simulator in this order:
 
-1. Explicit `ISAACSIM_LAUNCHER=/path/to/launcher` (an executable path).
-2. Explicit `ISAACSIM_VENV=/path/to/venv` containing `bin/isaacsim`.
-3. The adjacent source checkout's `../IsaacSim/run-local.sh`, preserving its
-   Ubuntu/CUDA compatibility setup.
-4. `~/robotics/isaacsim-6.2/.venv/bin/isaacsim`, the Brev pip installation.
+1. Explicit `ISAACSIM_PYTHON=/path/to/python-launcher` (configured Python).
+2. Explicit `ISAACSIM_VENV=/path/to/venv` containing `bin/python`.
+3. `ISAACSIM_SOURCE_ROOT` or the adjacent `../IsaacSim` source checkout.
+   `scripts/source-python.sh` uses its `python.sh` with the existing
+   libxml2/CUDA compatibility environment.
+4. `~/robotics/isaacsim-6.2/.venv/bin/python`, the Brev pip installation.
 
 The simulator uses its existing environment. The separate Pixi environment
 here supplies the viewer. Do not launch the simulator from a shell that has
@@ -99,15 +138,38 @@ IsaacSim checkout's existing tool cache. `PIXI_BIN` overrides this lookup.
 
 ## Timing and data
 
+This is a **standalone Python application**. `demo/main.py` creates
+`SimulationApp` before importing any Kit-dependent code and closes it on exit.
+After releasing the stream, callbacks and CSV file, it uses Isaac's default
+fast shutdown with an explicit exit code, preserving configuration/runtime errors.
+`CarterDemo.run()` owns the main thread. There are no async demo functions,
+scheduled asyncio tasks, or `--exec` scripts driving the simulation.
+
+The core loop is synchronous:
+
 ```python
 SimulationManager.setup_simulation(dt=1 / 300, device="cpu")
 RenderingManager.set_dt(1 / 30)
+
+while simulation_app.is_running():
+    if timeline.is_playing():
+        SimulationManager.step(steps=10)  # Physics only; IMU callback after each step.
+    RenderingManager.render()            # Render + GUI input; no physics step.
+    # Pace the loop against a monotonic wall-clock deadline at 30 Hz.
 ```
 
-Kit advances 1/30 simulation second per render/application update. PhysX
-performs ten actual 1/300-second solver steps in that interval. The RTX
-camera has `tick_rate=30`. The IMU updates on every physics step; its callback
-reads at post-step order 100, after the built-in IMU update at order 1.
+The actual loop also handles Stop/Play, checks for errors, and waits for its
+wall-clock deadline. Automatic physics during app updates is disabled with
+`/app/player/playSimulations=false`. Each render is checked to ensure it did
+not advance physics. Kit's internal rate limiter is disabled; the Python main
+loop owns pacing and avoids catch-up bursts after stalls. Physics initialization
+performs engine warm-up before the measured explicit steps.
+
+The RTX camera has `tick_rate=30`. The IMU updates on every physics step; its
+synchronous callback reads at post-step order 100, after the built-in IMU
+update at order 1. Each camera interval therefore contains ten real solver
+steps and ten distinct IMU samples. Extra per-substep Fabric updates are not
+requested; the normal render path handles the visual update.
 
 At real-time speed, this yields 300 IMU samples and 30 camera frames per
 wall-clock second. Under load, simulated time slows down while the simulation
@@ -151,13 +213,14 @@ All options use `--/carterDemo/NAME=VALUE`:
 
 ## Project files
 
-- `demo/carter_demo.py`: scene, wheel control, IMU callbacks and stream setup.
+- `demo/main.py`: standalone `SimulationApp` lifecycle.
+- `demo/carter_demo.py`: synchronous main loop, scene, wheel control, IMU callbacks and stream setup.
 - `demo/nova_carter_light.usda`: small overlay selecting the shipped robot's
   `Sensors=None`, `Configuration=No_Internals`, `Physics=physx`, `ROS=Disabled`
   variants. The script adds one camera and one IMU and rejects leftover stock
   sensors. NVIDIA assets download on the first uncached load.
-- `run.sh`: simulator launcher for source and pip installations.
-- `view.sh`, `setup-viewer.sh`, `scripts/pixi.sh`: isolated GStreamer viewer.
+- `run.sh`, `scripts/source-python.sh`: standalone Python launchers for pip and source installations.
+- `view.sh`, `scripts/rtsp_viewer.py`, `setup-viewer.sh`, `scripts/pixi.sh`: isolated GStreamer viewer and statistics.
 - `scripts/check-run.py`: validates sample timestamps and the step/frame ratio
   from a continuous bounded run.
 
@@ -167,15 +230,14 @@ Generated environments, captures and logs are excluded from Git.
 
 ## Validation
 
-The initial standalone-project checks passed on both installations:
+The standalone main loop has been exercised locally and on the Brev pip
+installation with one distinct IMU sample per explicit physics step, 3.333 ms
+sample spacing, and ten steps per render. The loop verifies that rendering
+adds no physics steps. GUI Pause/Resume and Stop/Play were also checked,
+including IMU timestamp reset and resumed RTSP streaming.
 
-| Runtime | Physics steps / IMU samples | Physics steps per update | Encoded frames |
-|---|---|---|---|
-| Local source build | 2,960 / 2,960 | 10 | 293 |
-| Brev pip installation | 8,460 / 8,460 | 10 | 843 |
-
-IMU timestamp spacing was approximately 3.333 ms. Encoder startup accounts
-for the first three missing encoded frames. The remote Pixi client decoded
-a 1280x720 frame successfully. Observed remote wall rates varied around
-270–300 physics/IMU Hz and 27–30 camera FPS after initialization; the
-simulation-time rates remained 300/30 Hz.
+The local viewer measured approximately 30 decoded/displayed FPS and 33.33 ms
+mean frame spacing. The Brev viewer observed roughly 26–28 FPS in the measured
+window, reflecting the remote simulator's wall-clock throughput. Both reported
+RTP jitter separately from decoded-frame variability and zero reported RTP
+loss/sink drops in those checks. Simulation-time rates remain 300/30 Hz.

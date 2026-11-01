@@ -30,13 +30,13 @@ def main() -> None:
     if not all(math.isclose(dt, 1 / args.physics_hz, rel_tol=0.01) for dt in deltas):
         raise SystemExit("IMU timestamps are not spaced at the requested physics rate (or Stop/Play occurred)")
     ratio = args.physics_hz / args.camera_hz
-    if not math.isclose(ratio, round(ratio)) or set(summary["physics_steps_per_app_update"]) != {str(round(ratio))}:
-        raise SystemExit("Unexpected physics steps per application update")
+    if not math.isclose(ratio, round(ratio)) or set(summary["physics_steps_per_render"]) != {str(round(ratio))}:
+        raise SystemExit("Unexpected physics steps per render")
     if summary["encoded_frames"] <= 0 or summary["position_m"][0] <= 0:
         raise SystemExit("Expected encoded camera frames and forward robot motion")
     print(
         f"PASS: {len(rows)} IMU samples, {1 / args.physics_hz:.6f}s spacing, "
-        f"{round(ratio)} physics steps/update, {summary['encoded_frames']} encoded frames, "
+        f"{round(ratio)} physics steps/render, {summary['encoded_frames']} encoded frames, "
         f"x={summary['position_m'][0]:.2f}m"
     )
 

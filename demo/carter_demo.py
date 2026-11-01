@@ -3,13 +3,12 @@
 
 """Drive a sensor-light Nova Carter with ten physics/IMU ticks per camera frame.
 
-Run with ``./run.sh``. Kit owns the loop and PhysX performs the
-substeps; no nested app.update() calls or Python sleep-based physics loop.
+Run with ``./run.sh``. The standalone entry point creates SimulationApp;
+this module owns an explicit, synchronous physics/render loop on the main thread.
 """
 
 from __future__ import annotations
 
-import asyncio
 import csv
 import json
 import math
@@ -108,7 +107,8 @@ class CountedRTSPWriter(RTSPStreamWriter):
 class CarterDemo:
     """Own the robot, sensor callbacks, stream, and bounded runtime statistics."""
 
-    def __init__(self) -> None:
+    def __init__(self, simulation_app: Any) -> None:
+        self.simulation_app = simulation_app
         self.config = read_config()
         self.app = omni.kit.app.get_app()
         self.timeline = omni.timeline.get_timeline_interface()
@@ -125,7 +125,6 @@ class CarterDemo:
         self.imu_dt_max = 0.0
         self.imu_latest = None
         self.step_batches = Counter()
-        self.last_app_steps = 0
         self.robot = None
         self.wheel_indices = None
         self.position = np.zeros(3)
@@ -135,10 +134,10 @@ class CarterDemo:
         self.drive_time = 0.0
         self.stream_attached = False
 
-    async def setup(self) -> None:
+    def setup(self) -> None:
         """Compose the light asset before playback and attach exactly two sensors."""
         self.timeline.stop()
-        await omni.usd.get_context().new_stage_async()
+        omni.usd.get_context().new_stage()
         stage = omni.usd.get_context().get_stage()
         world = UsdGeom.Xform.Define(stage, "/World")
         stage.SetDefaultPrim(world.GetPrim())
@@ -150,7 +149,7 @@ class CarterDemo:
         robot_prim = stage.DefinePrim("/World/Carter", "Xform")
         robot_prim.GetReferences().AddReference(str(Path(__file__).with_name("nova_carter_light.usda")))
         while omni.usd.get_context().get_stage_loading_status()[2] > 0:
-            await self.app.next_update_async()
+            self.app.update()
         chassis = stage.GetPrimAtPath("/World/Carter/chassis_link")
         if not chassis or not chassis.HasAPI(UsdPhysics.RigidBodyAPI):
             raise RuntimeError("Nova Carter asset did not load; check asset-server connectivity")
@@ -214,11 +213,12 @@ class CarterDemo:
             )
         )
 
-        # Ten real solver steps per application/render tick, not ten reads of one IMU sample.
+        # The main loop explicitly steps physics; app updates must never add automatic steps.
         settings = carb.settings.get_settings()
         # Hide the editor's oversized camera glyph in the following viewport.
         settings.set("/app/viewport/show/camera", False)
-        settings.set("/persistent/simulation/minFrameRate", int(self.config["cameraHz"]))
+        settings.set("/app/player/playSimulations", False)
+        settings.set("/app/runLoops/main/rateLimitEnabled", False)
         SimulationManager.setup_simulation(dt=1.0 / self.config["physicsHz"], device="cpu")
         RenderingManager.set_dt(1.0 / self.config["cameraHz"])
         self.timeline.set_ticks_per_frame(1)
@@ -268,6 +268,8 @@ class CarterDemo:
             SimulationManager.register_callback(self.on_stop, event=SimulationEvent.SIMULATION_STOPPED)
         )
         self.timeline.play()
+        self.timeline.commit()
+        SimulationManager.initialize_physics()
         self.started_wall = time.monotonic()
         set_camera_view(eye=[-4, -4, 3], target=[1, 0, 0.5])
         print(
@@ -348,23 +350,36 @@ class CarterDemo:
         if self.config["follow"]:
             set_camera_view(eye=[x - 4, y - 4, z + 3], target=[x + 1, y, z + 0.5])
 
-    async def run(self) -> None:
-        """Let Kit advance/render; report observed rates once per wall-clock second."""
-        await self.setup()
+    def run(self) -> None:
+        """Own the main thread: physics batch, one render, then optional wall-clock wait."""
+        self.setup()
+        steps_per_render = round(self.config["physicsHz"] / self.config["cameraHz"])
+        render_period = 1.0 / self.config["cameraHz"]
+        deadline = time.monotonic()
         last_wall = time.monotonic()
         last_steps = last_frames = last_samples = 0
-        while not self.config["duration"] or time.monotonic() - self.started_wall < self.config["duration"]:
-            await self.app.next_update_async()
+        while self.simulation_app.is_running():
+            if self.config["duration"] and time.monotonic() - self.started_wall >= self.config["duration"]:
+                break
             if self.error:
                 raise RuntimeError(self.error)
-            if self.timeline.is_playing() and not self.stream_attached:
-                self.writer.attach([self.render_product.path])
-                self.stream_attached = True
-            steps = self.physics_steps - self.last_app_steps
-            self.last_app_steps = self.physics_steps
-            if steps:
-                self.step_batches[steps] += 1
+            before = self.physics_steps
+            if self.timeline.is_playing():
+                # Stop/Play invalidates the physics view. Warm up before the next explicit batch.
+                if SimulationManager.get_physics_simulation_view() is None:
+                    SimulationManager.initialize_physics()
+                if not self.stream_attached:
+                    self.writer.attach([self.render_product.path])
+                    self.stream_attached = True
+                SimulationManager.step(steps=steps_per_render)
+                self.step_batches[self.physics_steps - before] += 1
             self.update_view()
+            before_render = self.physics_steps
+            RenderingManager.render()  # Services GUI input and renders without advancing physics.
+            if self.physics_steps != before_render:
+                raise RuntimeError("Render unexpectedly advanced physics")
+            if self.error:
+                raise RuntimeError(self.error)
             now = time.monotonic()
             if now - last_wall >= 1:
                 elapsed = now - last_wall
@@ -381,6 +396,13 @@ class CarterDemo:
                 last_wall, last_steps, last_frames, last_samples = now, self.physics_steps, frames, self.imu_samples
                 if self.csv_file:
                     self.csv_file.flush()
+            # Pace wall time independently of fixed simulation dt. Do not burst to catch up after a stall.
+            deadline += render_period
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
+                time.sleep(remaining)
+            else:
+                deadline = time.monotonic()
 
     def close(self) -> None:
         """Save run statistics and release the server and callback subscriptions."""
@@ -390,7 +412,7 @@ class CarterDemo:
             imu_samples=self.imu_samples,
             imu_dt_min=self.imu_dt_min if self.imu_samples > 1 else None,
             imu_dt_max=self.imu_dt_max,
-            physics_steps_per_app_update=dict(self.step_batches),
+            physics_steps_per_render=dict(self.step_batches),
             encoded_frames=self.writer.encoded_frames if self.writer else 0,
             position_m=self.position.tolist(),
             error=self.error,
@@ -412,13 +434,15 @@ class CarterDemo:
             self.render_product.destroy()
 
 
-async def run_checked() -> None:
-    """Terminate with a failing exit code on setup or callback errors."""
+def run_checked(simulation_app: Any) -> int:
+    """Run synchronously and return a failing exit code on setup or callback errors."""
     demo = None
     result = 0
     try:
-        demo = CarterDemo()
-        await demo.run()
+        demo = CarterDemo(simulation_app)
+        demo.run()
+    except KeyboardInterrupt:
+        pass
     except Exception:
         result = 1
         error = traceback.format_exc()
@@ -428,7 +452,4 @@ async def run_checked() -> None:
     finally:
         if demo:
             demo.close()
-        omni.kit.app.get_app().post_quit(result)
-
-
-carter_demo_task = asyncio.ensure_future(run_checked())
+    return result
