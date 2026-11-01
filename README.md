@@ -8,20 +8,21 @@ Open three terminals on Brev, each in `~/robotics/multi-rate-control`:
 
 ```bash
 ./run.sh       # Isaac Sim: 300 Hz physics/IMU, 30 Hz camera
-./control.sh   # Separate ROS 2 keyboard controller and IMU subscriber
+./control.sh   # ROS 2 GUI controller and IMU readout
 ./view.sh      # RTSP viewer
 ```
 
 Run each command in its own terminal. `./run.sh --no-window` runs Isaac without a GUI. The controller uses the installed system ROS 2 Humble/Python 3.10; Isaac uses its bundled Humble bridge with Python 3.12. Neither script requires sourcing ROS in the parent terminal.
 
-Carter starts stationary. In the controller terminal:
+Carter starts stationary. `./control.sh` opens a small controller window on the **Brev desktop**, including when launched over SSH (the default display is `:99`). Isaac itself can stay headless.
 
-- **W / S** increase/decrease forward speed by 0.1 m/s (negative means reverse).
-- **A / D** increase/decrease turning rate by 0.1 rad/s (positive turns left).
-- **Space** sets both commands to zero.
-- **Q** or **Ctrl+C** sends zero commands and exits.
+- **Throttle slider:** forward/reverse speed, from −1 to +1 m/s.
+- **Steering slider:** drag left to turn left, right to turn right (up to 1.2 rad/s).
+- **Straighten steering:** zero the turning rate while keeping the throttle setting.
+- **STOP**, **Space**, or **Esc:** immediately zero both commands.
+- **Close the window:** send a stop command and exit.
 
-Commands persist until changed. The controller publishes at 20 Hz. Speed is limited to ±1 m/s and turning rate to ±1.2 rad/s, matching Carter's shipped controller. It prints commanded speed, turning rate, received IMU frequency and the latest sample every **five wall-clock seconds**. IMU frequency here is the arrival rate, which falls below 300 Hz when simulation runs slower than real time.
+Sliders hold their settings until changed. Commands publish at 20 Hz. The window shows the latest IMU acceleration, measured turn rate, simulation timestamp and received sample rate, without periodic console output. The received rate uses wall time, so it falls below 300 Hz when simulation runs slower than real time.
 
 ## How it works
 
