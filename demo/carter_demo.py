@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""One camera at 30 Hz, one IMU at 300 Hz, and a main loop we own."""
+"""300 Hz physics, one camera at 30 Hz, and a main loop we own."""
 
 import time
 from pathlib import Path
@@ -22,23 +22,21 @@ app = SimulationApp({
         "--enable", "isaacsim.ros2.bridge",
         "--enable", "isaacsim.streaming.rtsp",
         "--enable", "isaacsim.sensors.experimental.rtx",
-        "--enable", "isaacsim.sensors.experimental.physics",
     ],
 })
 
 # Isaac/Kit imports must follow SimulationApp creation.
 import carb.settings
-import omni.graph.core as og
 import omni.replicator.core as rep
 import omni.timeline
 import omni.usd
 from isaacsim.core.rendering_manager import RenderingManager
-from isaacsim.core.simulation_manager import SimulationEvent, SimulationManager
+from isaacsim.core.simulation_manager import SimulationManager
 from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.streaming.rtsp import RTSPStreamWriter
 from isaacsim.streaming.rtsp.impl.render_var_utils import ensure_render_var_on_product
 
-# The scene already contains the robot, camera and IMU.
+# The scene already contains the robot and camera.
 stage = omni.usd.get_context().get_stage()
 
 # Explicit stepping: rendering/app updates must not advance physics automatically.
@@ -63,18 +61,7 @@ timeline.commit()
 SimulationManager.initialize_physics()
 set_camera_view(eye=[24, -22, 25], target=[8, 6, 0])  # Set once; GUI navigation stays free.
 
-# Run the shipped IMU bridge graph after the sensor backend updates each physics tick.
-imu_graph = og.get_graph_by_path("/World/Carter/chassis_imu")
-imu_tick = og.Controller.attribute("/World/Carter/chassis_imu/tick.state:enableImpulse")
-
-
-def publish_imu(dt, context):
-    og.Controller.set(imu_tick, True)
-    og.Controller.evaluate_sync(imu_graph)
-
-
-SimulationManager.register_callback(publish_imu, event=SimulationEvent.PHYSICS_POST_STEP, order=100)
-print("300 Hz physics + IMU, 30 Hz camera: rtsp://localhost:8554/stream", flush=True)
+print("300 Hz physics, 30 Hz camera: rtsp://localhost:8554/stream", flush=True)
 try:
     while app.is_running():
         started = time.monotonic()

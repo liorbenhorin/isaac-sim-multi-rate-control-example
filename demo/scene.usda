@@ -25,7 +25,7 @@ def Xform "World"
         over "chassis_link"
         {
             double3 xformOp:translate = (0, 0, 0.025)
-            # Disable stock sensor branches; our camera and IMU are direct children below.
+            # Disable stock sensor branches; our camera is a direct child below.
             over "sensors" (active = false) {}
 
             # Fisheye chase camera: 1 m behind, 1.3 m above, looking forward/down by 30 degrees.
@@ -57,51 +57,16 @@ def Xform "World"
                 )
                 uniform token[] xformOpOrder = ["xformOp:transform"]
             }
-
-            def IsaacImuSensor "IMU"
-            {
-                bool enabled = true
-                int angularVelocityFilterWidth = 1
-                int linearAccelerationFilterWidth = 1
-                int orientationFilterWidth = 1
-                double3 xformOp:translate = (0, 0, 0.2)
-                uniform token[] xformOpOrder = ["xformOp:translate"]
-            }
         }
 
-        # Reuse Carter's shipped ROS graphs, without odometry/TF or stock sensors.
+        # Reuse Carter's shipped drive graph; disable the unused ROS graphs.
         over "transform_tree_odometry" (active = false) {}
+        over "chassis_imu" (active = false) {}
         over "differential_drive"
         {
             over "ros2_subscribe_twist"
             {
                 custom string inputs:topicName = "cmd_vel"
-            }
-        }
-        over "chassis_imu"
-        {
-            token pipelineStage = "pipelineStageOnDemand"
-            over "on_playback_tick" (active = false) {}
-            def OmniGraphNode "tick" (
-                prepend apiSchemas = ["NodeGraphNodeAPI"]
-            )
-            {
-                token node:type = "omni.graph.action.OnImpulseEvent"
-                int node:typeVersion = 1
-            }
-            over "isaac_read_imu_node"
-            {
-                custom rel inputs:imuPrim = </World/Carter/chassis_link/IMU>
-                custom uint inputs:execIn.connect = </World/Carter/chassis_imu/tick.outputs:execOut>
-            }
-            over "ros2_publish_imu"
-            {
-                custom string inputs:frameId = "carter_imu"
-                custom double inputs:timeStamp.connect = </World/Carter/chassis_imu/isaac_read_imu_node.outputs:sensorTime>
-            }
-            over "ros2_qos_profile"
-            {
-                custom uint64 inputs:depth = 100
             }
         }
     }

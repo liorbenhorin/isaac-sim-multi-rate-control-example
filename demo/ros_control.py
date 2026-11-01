@@ -1,18 +1,15 @@
-"""Gamepad → ROS 2 velocity commands, with a quiet IMU readout."""
+"""Gamepad → ROS 2 velocity commands."""
 
 import math
 import os
 import signal
 import struct
-import time
 
 import rclpy
 from geometry_msgs.msg import Twist
 from rclpy.duration import Duration
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy
 from rclpy.signals import SignalHandlerOptions
-from sensor_msgs.msg import Imu
 
 
 def stick(value):
@@ -26,14 +23,8 @@ class CarterControl(Node):
         super().__init__("carter_control")
         self.joystick = os.open("/dev/input/js0", os.O_RDONLY | os.O_NONBLOCK)
         self.axes = [0, 0]  # Left stick X/Y: native DualSense and Selkies Xbox 360 mapping.
-        self.imu = None
-        self.samples = 0
-        self.reported_at = time.monotonic()
         self.publisher = self.create_publisher(Twist, "/cmd_vel", 10)
-        self.create_subscription(Imu, "/chassis/imu", self.read_imu,
-                                 QoSProfile(depth=100, reliability=ReliabilityPolicy.BEST_EFFORT))
         self.create_timer(0.05, self.drive)
-        self.create_timer(5.0, self.report)
 
     def drive(self):
         while True:
@@ -56,21 +47,6 @@ class CarterControl(Node):
         yaw_limit = 1.2 * (1.0 - abs(throttle)) + 0.2 * abs(throttle)
         command.angular.z = yaw_limit * steering * abs(steering)
         self.publisher.publish(command)
-
-    def read_imu(self, message):
-        self.imu = message
-        self.samples += 1
-
-    def report(self):
-        now = time.monotonic()
-        rate = self.samples / (now - self.reported_at)
-        if self.samples:
-            a, g = self.imu.linear_acceleration, self.imu.angular_velocity
-            print(f"IMU {rate:.0f} Hz | acceleration {a.x:.2f}, {a.y:.2f}, {a.z:.2f} m/s²"
-                  f" | yaw rate {g.z:.2f} rad/s", flush=True)
-        else:
-            print("Waiting for IMU…", flush=True)
-        self.samples, self.reported_at = 0, now
 
 
 def main():

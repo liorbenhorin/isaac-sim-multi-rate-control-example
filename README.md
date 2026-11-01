@@ -1,6 +1,6 @@
 # Multi-rate Carter with ROS 2
 
-A minimal standalone Isaac Sim 6.2 demo with 300 Hz physics/IMU, a 30 Hz fisheye RTSP camera, and ROS 2 gamepad control. The launchers target the existing Isaac Sim pip environment and system ROS 2 Humble on Brev at `~/robotics/multi-rate-control`.
+A minimal standalone Isaac Sim 6.2 demo with 300 Hz physics, a 30 Hz fisheye RTSP camera, and ROS 2 gamepad control. The launchers target the existing Isaac Sim pip environment and system ROS 2 Humble on Brev at `~/robotics/multi-rate-control`.
 
 ## Update
 
@@ -35,8 +35,8 @@ ROS debugging commands:
 
 ```bash
 ./scripts/pixi.sh run --locked -e ros2 ros2 topic list
-./scripts/pixi.sh run --locked -e ros2 ros2 topic hz /chassis/imu
-./scripts/pixi.sh run --locked -e ros2 ros2 topic echo /chassis/imu --once
+./scripts/pixi.sh run --locked -e ros2 ros2 topic hz /cmd_vel
+./scripts/pixi.sh run --locked -e ros2 ros2 topic echo /cmd_vel --once
 ```
 
 For an interactive ROS shell, use `./scripts/pixi.sh shell -e ros2`. Launch Isaac from a separate clean terminal: it uses its bundled Python/ROS libraries; the Pixi environment communicates with it over DDS. Both use Humble and `rmw_fastrtps_cpp`. If setting `ROS_DOMAIN_ID`, use the same value in both terminals.
@@ -46,8 +46,8 @@ For an interactive ROS shell, use `./scripts/pixi.sh shell -e ros2`. Launch Isaa
 Open three terminals on Brev, each in `~/robotics/multi-rate-control`:
 
 ```bash
-./run.sh       # Isaac Sim: 300 Hz physics/IMU, 30 Hz camera
-./control.sh   # ROS 2 gamepad controller and IMU readout
+./run.sh       # Isaac Sim: 300 Hz physics, 30 Hz camera
+./control.sh   # ROS 2 gamepad controller
 ./view.sh      # RTSP viewer
 ```
 
@@ -60,7 +60,7 @@ Carter starts stationary. Connect your gamepad through the Brev desktop's joysti
 - **Center the stick:** stop. A 10% dead zone ignores stick drift.
 - **Ctrl+C:** send a stop command and exit.
 
-Selkies presents the DualSense as a Microsoft Xbox 360 pad: left-stick axes 0/1; buttons are unused. The gamepad mappings and command limits are in `demo/ros_control.py`; the shipped differential controller retains its 1 m/s linear speed limit. Commands publish at 20 Hz; IMU acceleration, yaw rate and received sample rate print every five seconds. The sample rate uses wall time, so it falls below 300 Hz when simulation runs slower than real time.
+Selkies presents the DualSense as a Microsoft Xbox 360 pad: left-stick axes 0/1; buttons are unused. The gamepad mappings and command limits are in `demo/ros_control.py`; the shipped differential controller retains its 1 m/s linear speed limit. Commands publish at 20 Hz.
 
 This is a custom joystick response curve based on throttle demand, not measured vehicle speed. Isaac’s shipped differential-drive graph still converts `/cmd_vel` to wheel velocities and applies its acceleration limits.
 
@@ -68,13 +68,11 @@ The controller stops on joystick read errors or end-of-stream. Desktop/browser d
 
 ## How it works
 
-`demo/scene.usda` selects Carter's shipped `ROS="Enabled"` and `Sensors="None"` variants. The stock sensor branch and odometry/TF graph are disabled; the scene contains one camera and one IMU.
+`demo/scene.usda` selects Carter's shipped `ROS="Enabled"` and `Sensors="None"` variants. The stock sensor branch, IMU graph, and odometry/TF graph are disabled; the scene contains one camera.
 
 The shipped differential-drive graph subscribes to **`/cmd_vel` (`geometry_msgs/Twist`)** and converts forward speed (`linear.x`) and yaw rate (`angular.z`) to wheel commands. It processes commands on each render/app update; physics integrates those commands at 300 Hz.
 
-The shipped IMU graph is retargeted to our sensor and publishes **`/chassis/imu` (`sensor_msgs/Imu`)**, with frame ID `carter_imu` and sensor simulation-time timestamps. Python triggers that graph after each physics tick, after the IMU backend updates. IMU reading and ROS message construction happen in the shipped graph nodes.
-
-`demo/carter_demo.py` creates/configures physics, runs ten physics ticks per render, and streams the camera using Isaac's RTSP writer. `demo/ros_control.py` is the separate ROS controller/subscriber. Physics configuration stays in Python; static scene and bridge wiring stay in USD. The 300/30 Hz rates are in simulation time; wall-clock sleep targets real time, but computation can make the simulator run slower.
+`demo/carter_demo.py` creates/configures physics, runs ten physics ticks per render, and streams the camera using Isaac's RTSP writer. `demo/ros_control.py` is the separate ROS gamepad controller. Physics configuration stays in Python; static scene and bridge wiring stay in USD. The 300/30 Hz rates are in simulation time; wall-clock sleep targets real time, but computation can make the simulator run slower.
 
 The RTSP camera uses a native OpenCV fisheye projection (approximately 159° horizontal field of view). It sits 1 m behind and 1.3 m above the chassis origin, tilted 30° downward, so Carter and the track ahead are visible together. Lens intrinsics are authored for 1280 × 720 in `demo/scene.usda`. The camera follows the chassis through its USD parent transform.
 
