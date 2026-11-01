@@ -53,7 +53,7 @@ class CarterControl(Node):
                 self.enabled = bool(value)
         command = Twist()
         if self.enabled:
-            command.linear.x = -stick(self.axes[1]) * 1.0  # Up = forward, max 1 m/s.
+            command.linear.x = -stick(self.axes[1]) * 2.0  # Up = forward, max 2 m/s.
             command.angular.z = -stick(self.axes[0]) * 1.2  # Left = positive yaw.
         self.publisher.publish(command)
 

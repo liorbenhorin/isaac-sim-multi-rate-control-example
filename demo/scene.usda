@@ -73,6 +73,10 @@ def Xform "World"
         over "transform_tree_odometry" (active = false) {}
         over "differential_drive"
         {
+            over "differential_controller_01"
+            {
+                custom double inputs:maxLinearSpeed = 2
+            }
             over "ros2_subscribe_twist"
             {
                 custom string inputs:topicName = "cmd_vel"

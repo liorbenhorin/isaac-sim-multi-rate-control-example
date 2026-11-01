@@ -1,6 +1,17 @@
 # Multi-rate Carter with ROS 2 — Brev
 
-This branch adds ROS 2 control to the demo. Keep the local repository and Brev copy in sync; run simulation and ROS tests on Brev at `~/robotics/multi-rate-control`. The launchers below target its existing Isaac Sim pip environment and system ROS 2 Humble.
+A minimal standalone Isaac Sim 6.2 demo with 300 Hz physics/IMU, a 30 Hz fisheye RTSP camera, and ROS 2 gamepad control. The launchers target the existing Isaac Sim pip environment and system ROS 2 Humble on Brev at `~/robotics/multi-rate-control`.
+
+## Update
+
+GitHub is the shared source: [isaac-sim-multi-rate-control-example](https://github.com/liorbenhorin/isaac-sim-multi-rate-control-example). Push changes from the development PC; pull on Brev before restarting the demo:
+
+```bash
+cd ~/robotics/multi-rate-control
+git pull --ff-only
+```
+
+Simulation and ROS tests run on Brev. `scripts/generate_track.py` can run on either machine with standard Python.
 
 ## Run
 
@@ -17,12 +28,12 @@ Run each command in its own terminal. `./run.sh --no-window` runs Isaac without 
 Carter starts stationary. Connect your gamepad through the Brev desktop's joystick forwarding, then run `./control.sh` (either on the desktop or over SSH). Isaac can stay headless. The launcher sets the Selkies runtime directory and input interposer so Python can read `/dev/input/js0`; no additional gamepad packages are needed.
 
 - **Hold L1 / left bumper:** enable driving; release it to stop.
-- **Left stick up/down:** forward/reverse, up to 1 m/s.
+- **Left stick up/down:** forward/reverse, up to 2 m/s.
 - **Left stick left/right:** turn left/right, up to 1.2 rad/s; turning in place also works.
 - **Center the stick:** stop. A 10% dead zone ignores stick drift.
 - **Ctrl+C:** send a stop command and exit.
 
-Selkies presents the DualSense as a Microsoft Xbox 360 pad: left-stick axes 0/1 and L1 button 4. These mappings and speed limits are in `demo/ros_control.py`. Commands publish at 20 Hz; IMU acceleration, yaw rate and received sample rate print every five seconds. The sample rate uses wall time, so it falls below 300 Hz when simulation runs slower than real time.
+Selkies presents the DualSense as a Microsoft Xbox 360 pad: left-stick axes 0/1 and L1 button 4. The gamepad mappings and command limits are in `demo/ros_control.py`; `demo/scene.usda` also sets the shipped differential controller’s linear speed limit to 2 m/s. Commands publish at 20 Hz; IMU acceleration, yaw rate and received sample rate print every five seconds. The sample rate uses wall time, so it falls below 300 Hz when simulation runs slower than real time.
 
 The controller stops on joystick read errors or end-of-stream. Desktop/browser disconnect behavior depends on Selkies forwarding release events; joystick silence alone is not a disconnect signal because a held stick need not emit new events.
 
@@ -45,4 +56,4 @@ ssh -N -L 8555:localhost:8554 nvidia-accelerated-desktop---robotics-a223e8
 ./view.sh rtsp://localhost:8555/stream
 ```
 
-The first launch downloads the referenced Carter asset. `demo/track.usda` is a fixed, untextured 20 × 16 m circuit with a 2.4 m lane and continuous red/white barriers, 0.8 m high and 0.22 m thick. The floor and barrier blocks have static collision geometry. Carter starts on the straight facing the checkerboard; holding forward eventually drives it into a barrier. The main loop no longer reads the robot pose or moves the ground.
+The first launch downloads the referenced Carter asset. `demo/track.usda` is a fixed, untextured 20 × 16 m circuit with a 2.4 m lane and continuous red/white barriers, 0.8 m high and 0.22 m thick. The floor and both continuous wall meshes have static collision geometry. Wall sections share vertices, with red/white materials assigned per face, so there are no overlapping box faces at the joins. Curves use 24 segments per quarter turn and smooth side normals. To regenerate the static asset, run `python3 scripts/generate_track.py`; the simulator simply loads the USD. Carter starts on the straight facing the checkerboard; holding forward eventually drives it into a barrier. The main loop no longer reads the robot pose or moves the ground.
