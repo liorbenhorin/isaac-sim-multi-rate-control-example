@@ -1,4 +1,4 @@
-# Multi-rate Carter with ROS 2 — Brev
+# Multi-rate Carter with ROS 2
 
 A minimal standalone Isaac Sim 6.2 demo with 300 Hz physics/IMU, a 30 Hz fisheye RTSP camera, and ROS 2 gamepad control. The launchers target the existing Isaac Sim pip environment and system ROS 2 Humble on Brev at `~/robotics/multi-rate-control`.
 
@@ -11,9 +11,37 @@ cd ~/robotics/multi-rate-control
 git pull --ff-only
 ```
 
-Simulation and ROS tests run on Brev. `scripts/generate_track.py` can run on either machine with standard Python.
+Simulation and ROS tests can run locally or on Brev. `scripts/generate_track.py` runs with standard Python.
 
-## Run
+## Run locally
+
+The local launcher uses the source-built Isaac Sim in the adjacent `../IsaacSim` directory, including its Ubuntu 26.04 compatibility libraries. ROS tools and the controller use a separate [RoboStack](https://robostack.github.io/GettingStarted.html) Humble environment managed by Pixi:
+
+```bash
+./scripts/pixi.sh install --locked -e ros2
+```
+
+Run these in separate terminals, from this repository:
+
+```bash
+./run-local.sh --no-window
+./scripts/pixi.sh run --locked -e ros2 control
+./view.sh
+```
+
+The local controller reads the USB DualSense directly at `/dev/input/js0` and uses the same L1/left-stick mapping. It does not need Selkies forwarding. The existing `control.sh` remains the Brev launcher.
+
+ROS debugging commands:
+
+```bash
+./scripts/pixi.sh run --locked -e ros2 ros2 topic list
+./scripts/pixi.sh run --locked -e ros2 ros2 topic hz /chassis/imu
+./scripts/pixi.sh run --locked -e ros2 ros2 topic echo /chassis/imu --once
+```
+
+For an interactive ROS shell, use `./scripts/pixi.sh shell -e ros2`. Launch Isaac from a separate clean terminal: it uses its bundled Python/ROS libraries; the Pixi environment communicates with it over DDS. Both use Humble and `rmw_fastrtps_cpp`. If setting `ROS_DOMAIN_ID`, use the same value in both terminals.
+
+## Run on Brev
 
 Open three terminals on Brev, each in `~/robotics/multi-rate-control`:
 

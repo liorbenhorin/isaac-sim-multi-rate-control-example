@@ -14,3 +14,24 @@ pygobject = "*"
 
 [tasks]
 view = "python scripts/rtsp_viewer.py"
+
+# Local ROS tools/controllers use their own Python and libraries, separate from Isaac.
+[feature.ros2]
+channels = ["https://prefix.dev/robostack-humble", "conda-forge"]
+
+[feature.ros2.dependencies]
+python = "*"
+ros-humble-ros-base = "*"
+ros-humble-rmw-fastrtps-cpp = "*"
+ros-humble-geometry-msgs = "*"
+ros-humble-sensor-msgs = "*"
+
+[feature.ros2.activation.env]
+ROS_DISTRO = "humble"
+RMW_IMPLEMENTATION = "rmw_fastrtps_cpp"
+
+[feature.ros2.tasks]
+control = "python demo/ros_control.py"
+
+[environments]
+ros2 = { features = ["ros2"], no-default-feature = true }

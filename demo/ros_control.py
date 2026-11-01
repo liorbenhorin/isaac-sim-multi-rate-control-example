@@ -1,4 +1,4 @@
-"""Selkies gamepad → ROS 2 velocity commands, with a quiet IMU readout."""
+"""Gamepad → ROS 2 velocity commands, with a quiet IMU readout."""
 
 import math
 import os
@@ -25,7 +25,7 @@ class CarterControl(Node):
     def __init__(self):
         super().__init__("carter_control")
         self.joystick = os.open("/dev/input/js0", os.O_RDONLY | os.O_NONBLOCK)
-        self.axes = [0, 0]  # Left stick X/Y; Selkies exposes the Xbox 360 mapping.
+        self.axes = [0, 0]  # Left stick X/Y: native DualSense and Selkies Xbox 360 mapping.
         self.enabled = False
         self.imu = None
         self.samples = 0
