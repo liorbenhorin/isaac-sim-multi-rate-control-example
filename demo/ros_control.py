@@ -1,122 +1,94 @@
-"""GUI throttle/steering commands and IMU readout in a separate ROS 2 process."""
+"""Selkies gamepad → ROS 2 velocity commands, with a quiet IMU readout."""
 
-import threading
+import math
+import os
+import signal
+import struct
 import time
-import tkinter as tk
-from tkinter import ttk
 
 import rclpy
 from geometry_msgs.msg import Twist
 from rclpy.duration import Duration
-from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from rclpy.signals import SignalHandlerOptions
 from sensor_msgs.msg import Imu
 
 
+def stick(value):
+    """Normalize a Linux joystick axis with a 10% dead zone."""
+    value = max(-1.0, min(1.0, value / 32767))
+    return math.copysign(max(0.0, (abs(value) - 0.1) / 0.9), value)
+
+
 class CarterControl(Node):
     def __init__(self):
         super().__init__("carter_control")
-        self.command = Twist()
+        self.joystick = os.open("/dev/input/js0", os.O_RDONLY | os.O_NONBLOCK)
+        self.axes = [0, 0]  # Left stick X/Y; Selkies exposes the Xbox 360 mapping.
+        self.enabled = False
         self.imu = None
         self.samples = 0
-        self.received_at = 0.0
+        self.reported_at = time.monotonic()
         self.publisher = self.create_publisher(Twist, "/cmd_vel", 10)
         self.create_subscription(Imu, "/chassis/imu", self.read_imu,
                                  QoSProfile(depth=100, reliability=ReliabilityPolicy.BEST_EFFORT))
-        self.create_timer(0.05, lambda: self.publisher.publish(self.command))
+        self.create_timer(0.05, self.drive)
+        self.create_timer(5.0, self.report)
+
+    def drive(self):
+        while True:
+            try:
+                event = os.read(self.joystick, 8)
+            except BlockingIOError:
+                break
+            if not event:
+                raise OSError("Joystick disconnected")
+            # Linux js_event: timestamp, signed value, type, axis/button index.
+            _, value, kind, number = struct.unpack("IhBB", event)
+            kind &= ~0x80  # Initial-state events carry the same axis/button data.
+            if kind == 2 and number < 2:
+                self.axes[number] = value
+            elif kind == 1 and number == 4:  # L1 / left bumper: hold to drive.
+                self.enabled = bool(value)
+        command = Twist()
+        if self.enabled:
+            command.linear.x = -stick(self.axes[1]) * 1.0  # Up = forward, max 1 m/s.
+            command.angular.z = -stick(self.axes[0]) * 1.2  # Left = positive yaw.
+        self.publisher.publish(command)
 
     def read_imu(self, message):
         self.imu = message
         self.samples += 1
-        self.received_at = time.monotonic()
 
-
-def make_window(node):
-    root = tk.Tk()
-    root.title("Nova Carter — Drive")
-    root.resizable(False, False)
-    root.option_add("*Font", "{DejaVu Sans} 11")
-    ttk.Label(root, text="Nova Carter", font=("DejaVu Sans", 18, "bold")).pack(pady=(16, 4))
-    ttk.Label(root, text="Sliders hold their settings. Space or Esc stops.").pack(padx=20, pady=(0, 8))
-
-    def change(_=None):
-        command = Twist()
-        command.linear.x = throttle.get()
-        command.angular.z = steering.get()
-        node.command = command
-
-    throttle = tk.Scale(root, name="throttle", from_=-1.0, to=1.0, resolution=0.05,
-                        orient="horizontal", length=480, command=change,
-                        label="Throttle (m/s): reverse ← → forward")
-    throttle.pack(padx=20, pady=8)
-    steering = tk.Scale(root, name="steering", from_=1.2, to=-1.2, resolution=0.05,
-                        orient="horizontal", length=480, command=change,
-                        label="Steering (rad/s): left ← → right")
-    steering.pack(padx=20, pady=8)
-
-    def stop(event=None):
-        throttle.set(0)
-        steering.set(0)
-        node.command = Twist()
-        node.publisher.publish(node.command)
-        return "break"
-
-    tk.Button(root, name="stop", text="STOP  ·  Space", command=stop,
-              bg="#bc3037", fg="white", activebackground="#99252b", activeforeground="white",
-              font=("DejaVu Sans", 15, "bold")).pack(fill="x", padx=24, pady=(8, 6))
-    ttk.Button(root, name="straighten", text="Straighten steering", command=lambda: steering.set(0)).pack(
-        fill="x", padx=24, pady=(0, 12))
-    status = tk.StringVar(value="Waiting for IMU…\n\n")
-    ttk.Label(root, name="status", textvariable=status, justify="left", width=55).pack(padx=24, pady=(0, 16))
-    root.bind("<space>", stop)
-    root.bind("<Escape>", stop)
-    root.protocol("WM_DELETE_WINDOW", root.quit)
-    last_time, last_count, rate = time.monotonic(), 0, 0.0
-
-    def refresh():
-        nonlocal last_time, last_count, rate
+    def report(self):
         now = time.monotonic()
-        if now - last_time >= 1:
-            rate = (node.samples - last_count) / (now - last_time)
-            last_time, last_count = now, node.samples
-        message = node.imu
-        if message is None or now - node.received_at > 1:
-            status.set("No IMU data — simulator stopped or disconnected\n\n")
+        rate = self.samples / (now - self.reported_at)
+        if self.samples:
+            a, g = self.imu.linear_acceleration, self.imu.angular_velocity
+            print(f"IMU {rate:.0f} Hz | acceleration {a.x:.2f}, {a.y:.2f}, {a.z:.2f} m/s²"
+                  f" | yaw rate {g.z:.2f} rad/s", flush=True)
         else:
-            a, g, stamp = message.linear_acceleration, message.angular_velocity, message.header.stamp
-            status.set(f"IMU: {rate:.0f} samples/s    Time: {stamp.sec + stamp.nanosec / 1e9:.2f}s\n"
-                       f"Acceleration: {a.x:.2f}, {a.y:.2f}, {a.z:.2f} m/s²\n"
-                       f"Measured turn rate: {g.z:.2f} rad/s")
-        root.after(200, refresh)
-
-    refresh()
-    return root
+            print("Waiting for IMU…", flush=True)
+        self.samples, self.reported_at = 0, now
 
 
 def main():
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
+    signal.signal(signal.SIGTERM, signal.default_int_handler)
     node = CarterControl()
-    root = make_window(node)
-    # ROS drains the 300 Hz IMU stream independently of Tk's main UI thread.
-    executor = SingleThreadedExecutor()
-    executor.add_node(node)
-    worker = threading.Thread(target=executor.spin, daemon=True)
-    worker.start()
+    print("Hold L1 + left stick: up/down = forward/reverse, left/right = turn."
+          " Release L1 to stop. Ctrl+C exits.", flush=True)
     try:
-        root.mainloop()
+        rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
-        node.command = Twist()
-        executor.shutdown()
-        worker.join()
-        node.publisher.publish(node.command)
+        node.publisher.publish(Twist())
         node.publisher.wait_for_all_acked(Duration(seconds=0.2))
+        os.close(node.joystick)
         node.destroy_node()
         rclpy.shutdown()
-        root.destroy()
 
 
 if __name__ == "__main__":

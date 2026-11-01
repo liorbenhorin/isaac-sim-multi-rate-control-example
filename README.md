@@ -8,21 +8,23 @@ Open three terminals on Brev, each in `~/robotics/multi-rate-control`:
 
 ```bash
 ./run.sh       # Isaac Sim: 300 Hz physics/IMU, 30 Hz camera
-./control.sh   # ROS 2 GUI controller and IMU readout
+./control.sh   # ROS 2 gamepad controller and IMU readout
 ./view.sh      # RTSP viewer
 ```
 
 Run each command in its own terminal. `./run.sh --no-window` runs Isaac without a GUI. The controller uses the installed system ROS 2 Humble/Python 3.10; Isaac uses its bundled Humble bridge with Python 3.12. Neither script requires sourcing ROS in the parent terminal.
 
-Carter starts stationary. `./control.sh` opens a small controller window on the **Brev desktop**, including when launched over SSH (the default display is `:99`). Isaac itself can stay headless.
+Carter starts stationary. Connect your gamepad through the Brev desktop's joystick forwarding, then run `./control.sh` (either on the desktop or over SSH). Isaac can stay headless. The launcher sets the Selkies runtime directory and input interposer so Python can read `/dev/input/js0`; no additional gamepad packages are needed.
 
-- **Throttle slider:** forward/reverse speed, from −1 to +1 m/s.
-- **Steering slider:** drag left to turn left, right to turn right (up to 1.2 rad/s).
-- **Straighten steering:** zero the turning rate while keeping the throttle setting.
-- **STOP**, **Space**, or **Esc:** immediately zero both commands.
-- **Close the window:** send a stop command and exit.
+- **Hold L1 / left bumper:** enable driving; release it to stop.
+- **Left stick up/down:** forward/reverse, up to 1 m/s.
+- **Left stick left/right:** turn left/right, up to 1.2 rad/s; turning in place also works.
+- **Center the stick:** stop. A 10% dead zone ignores stick drift.
+- **Ctrl+C:** send a stop command and exit.
 
-Sliders hold their settings until changed. Commands publish at 20 Hz. The window shows the latest IMU acceleration, measured turn rate, simulation timestamp and received sample rate, without periodic console output. The received rate uses wall time, so it falls below 300 Hz when simulation runs slower than real time.
+Selkies presents the DualSense as a Microsoft Xbox 360 pad: left-stick axes 0/1 and L1 button 4. These mappings and speed limits are in `demo/ros_control.py`. Commands publish at 20 Hz; IMU acceleration, yaw rate and received sample rate print every five seconds. The sample rate uses wall time, so it falls below 300 Hz when simulation runs slower than real time.
+
+The controller stops on joystick read errors or end-of-stream. Desktop/browser disconnect behavior depends on Selkies forwarding release events; joystick silence alone is not a disconnect signal because a held stick need not emit new events.
 
 ## How it works
 
