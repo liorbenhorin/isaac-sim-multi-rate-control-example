@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""300 Hz physics, one camera at 30 Hz, and a main loop we own."""
+"""300 Hz physics, a 30 Hz camera, a 10 Hz lidar, and a main loop we own."""
 
 import time
 from pathlib import Path
@@ -15,6 +15,7 @@ app = SimulationApp({
     "open_usd": str(Path(__file__).with_name("scene.usda")),
     "headless": False,
     "multi_gpu": False,
+    "enable_motion_bvh": True,  # Lidar motion compensation with multi-tick rendering.
     "renderer": "RaytracedLighting",
     "extra_args": [
         "--/exts/isaacsim.core.simulation_manager/default_engine=physx",
@@ -36,7 +37,7 @@ from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.streaming.rtsp import RTSPStreamWriter
 from isaacsim.streaming.rtsp.impl.render_var_utils import ensure_render_var_on_product
 
-# The scene already contains the robot and camera.
+# The scene contains the robot, camera, and lidar with its ROS publisher.
 stage = omni.usd.get_context().get_stage()
 
 # Explicit stepping: rendering/app updates must not advance physics automatically.
@@ -62,6 +63,7 @@ SimulationManager.initialize_physics()
 set_camera_view(eye=[24, -22, 25], target=[8, 6, 0])  # Set once; GUI navigation stays free.
 
 print("300 Hz physics, 30 Hz camera: rtsp://localhost:8554/stream", flush=True)
+print("10 Hz XT-32 lidar: /front_3d_lidar/points (frame: front_3d_lidar)", flush=True)
 try:
     while app.is_running():
         started = time.monotonic()

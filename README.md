@@ -1,6 +1,6 @@
 # Multi-rate Carter with ROS 2
 
-A minimal standalone Isaac Sim 6.2 demo with 300 Hz physics, a 30 Hz fisheye RTSP camera, and ROS 2 gamepad control. The launchers target the existing Isaac Sim pip environment and system ROS 2 Humble on Brev at `~/robotics/multi-rate-control`.
+A minimal standalone Isaac Sim 6.2 demo with 300 Hz physics, a 30 Hz fisheye RTSP camera, a 10 Hz XT-32 lidar publishing ROS 2 point clouds, and ROS 2 gamepad control. The launchers target the existing Isaac Sim pip environment and system ROS 2 Humble on Brev at `~/robotics/multi-rate-control`.
 
 ## Update
 
@@ -43,12 +43,13 @@ For an interactive ROS shell, use `./scripts/pixi.sh shell -e ros2`. Launch Isaa
 
 ## Run on Brev
 
-Open three terminals on Brev, each in `~/robotics/multi-rate-control`:
+Open separate terminals on the Brev desktop, each in `~/robotics/multi-rate-control`:
 
 ```bash
-./run.sh       # Isaac Sim: 300 Hz physics, 30 Hz camera
+./run.sh       # Isaac Sim: 300 Hz physics, 30 Hz camera, 10 Hz lidar
 ./control.sh   # ROS 2 gamepad controller
 ./view.sh      # RTSP viewer
+./view-lidar.sh # RViz point-cloud and robot TF viewer
 ```
 
 Run each command in its own terminal. `./run.sh --no-window` runs Isaac without a GUI. The controller uses the installed system ROS 2 Humble/Python 3.10; Isaac uses its bundled Humble bridge with Python 3.12. Neither script requires sourcing ROS in the parent terminal.
@@ -68,13 +69,31 @@ The controller stops on joystick read errors or end-of-stream. Desktop/browser d
 
 ## How it works
 
-`demo/scene.usda` selects Carter's shipped `ROS="Enabled"` and `Sensors="None"` variants. The stock sensor branch, IMU graph, and odometry/TF graph are disabled; the scene contains one camera.
+`demo/scene.usda` selects Carter's shipped `ROS="Enabled"` and `Sensors="All_Sensors"` variants, then deactivates every stock sensor except the Hesai XT-32 3D lidar. The IMU graph remains disabled; the scene also contains our fisheye camera. Carter's odometry/TF graph publishes the robot frames, with its sensor targets restricted to the active lidar and camera. A clock publisher in the same graph publishes `/clock`.
 
 The shipped differential-drive graph subscribes to **`/cmd_vel` (`geometry_msgs/Twist`)** and converts forward speed (`linear.x`) and yaw rate (`angular.z`) to wheel commands. It processes commands on each render/app update; physics integrates those commands at 300 Hz.
 
 `demo/carter_demo.py` creates/configures physics, runs ten physics ticks per render, and streams the camera using Isaac's RTSP writer. `demo/ros_control.py` is the separate ROS gamepad controller. Physics configuration stays in Python; static scene and bridge wiring stay in USD. The 300/30 Hz rates are in simulation time; wall-clock sleep targets real time, but computation can make the simulator run slower.
 
 The RTSP camera uses a native OpenCV fisheye projection (approximately 159° horizontal field of view). It sits 1 m behind and 1.3 m above the chassis origin, tilted 30° downward, so Carter and the track ahead are visible together. Lens intrinsics are authored for 1280 × 720 in `demo/scene.usda`. The camera follows the chassis through its USD parent transform.
+
+### Lidar in RViz
+
+The XT-32 uses Carter's stock mount and ROS graph to publish **`/front_3d_lidar/points` (`sensor_msgs/msg/PointCloud2`)**, with frame ID `front_3d_lidar`. Its sensor tick rate and scan rate are both 10 Hz in simulation time, with full-scan accumulation enabled. The camera still renders at 30 Hz and physics runs at 300 Hz.
+
+Run `./view-lidar.sh` on the Brev desktop while the simulator is running. It sources system ROS 2 Humble and opens `demo/lidar.rviz`, with the point-cloud topic, Best Effort QoS, height coloring, and a **Robot TF** display with labeled axes and arrows. RViz uses simulation time from `/clock`, the fixed frame `odom`, and a view centered on `base_link`. The TF tree includes `odom → base_link → chassis_link`, the wheels/casters, `front_3d_lidar`, and `chase_camera`. It shows the latest scan, not an accumulated world map. RViz is already installed on the current Brev instance; elsewhere, install `ros-humble-rviz2` and source your ROS 2 environment before launching. Extra RViz arguments are forwarded by the script.
+
+Restart the simulator and RViz after changing the scene or viewer configuration. With lidar motion compensation enabled, RTX pipeline compilation can take about two minutes during startup before camera and ROS topics become available.
+
+To inspect the publisher on Brev:
+
+```bash
+source /opt/ros/humble/setup.bash
+ros2 topic info /front_3d_lidar/points --verbose
+ros2 topic hz /front_3d_lidar/points
+```
+
+RViz needs a graphical desktop even when Isaac runs with `--no-window`. Run the viewer inside the Brev desktop for remote use; the RTSP SSH tunnel below does not carry ROS 2/DDS traffic. If setting `ROS_DOMAIN_ID`, use the same value for the simulator and viewer.
 
 The GUI viewpoint remains freely navigable. The RTSP viewer reports FPS/jitter every five seconds. To view the remote camera locally, keep this tunnel open and use the original local viewer:
 
