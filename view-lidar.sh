@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Open the XT-32 point cloud and robot TF in RViz on the machine's desktop.
+# Open 3D/2D lidar scans and robot TF in RViz on the machine's desktop.
 set -eo pipefail
 DEMO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f /opt/ros/humble/setup.bash ]; then
