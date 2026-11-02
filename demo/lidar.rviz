@@ -43,38 +43,6 @@ Visualization Manager:
       Use Fixed Frame: true
       Autocompute Value Bounds: true
       Decay Time: 0
-    - Class: rviz_default_plugins/LaserScan
-      Name: Front 2D Scan
-      Enabled: true
-      Topic:
-        Value: /front_2d_lidar/scan
-        Reliability Policy: Best Effort
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Depth: 5
-      Queue Size: 5
-      Style: Points
-      Size (Pixels): 5
-      Position Transformer: XYZ
-      Color Transformer: FlatColor
-      Color: 0; 255; 255
-      Decay Time: 0
-    - Class: rviz_default_plugins/LaserScan
-      Name: Rear 2D Scan
-      Enabled: true
-      Topic:
-        Value: /rear_2d_lidar/scan
-        Reliability Policy: Best Effort
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Depth: 5
-      Queue Size: 5
-      Style: Points
-      Size (Pixels): 5
-      Position Transformer: XYZ
-      Color Transformer: FlatColor
-      Color: 255; 0; 255
-      Decay Time: 0
   Tools:
     - Class: rviz_default_plugins/Interact
     - Class: rviz_default_plugins/MoveCamera

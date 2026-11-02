@@ -10,7 +10,7 @@
 
 def Xform "World"
 {
-    # Keep the drive train and lidars; exclude the stock cameras and IMU.
+    # Keep the drive train and XT-32; exclude the other stock sensors.
     def Xform "Carter" (
         prepend references = @https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.2/Isaac/Robots/NVIDIA/NovaCarter/nova_carter.usd@
         variants = {
@@ -36,57 +36,9 @@ def Xform "World"
                 over "left_owl" (active = false) {}
                 over "right_owl" (active = false) {}
                 over "back_owl" (active = false) {}
+                over "front_RPLidar" (active = false) {}
+                over "rear_RPLidar" (active = false) {}
                 over "chassis_imu" (active = false) {}
-
-                over "front_RPLidar"
-                {
-                    custom string isaac:namespace = "front_2d_lidar"
-                    over "RPLidar_S2E"
-                    {
-                        custom string isaac:nameOverride = "front_2d_lidar"
-                        float omni:sensor:tickRate = 10
-                        uint omni:sensor:Core:scanRateBaseHz = 10
-                        bool omni:sensor:Core:accumulateOutputs = true
-                    }
-                    over "ROS_TF" (active = false) {}
-                    over "ROS_Lidar"
-                    {
-                        over "frameId"
-                        {
-                            custom string inputs:value = "front_2d_lidar"
-                        }
-                        over "LaserScanPublish"
-                        {
-                            custom string inputs:topicName = "scan"
-                            custom bool inputs:fullScan = true
-                        }
-                    }
-                }
-
-                over "rear_RPLidar"
-                {
-                    custom string isaac:namespace = "rear_2d_lidar"
-                    over "RPLidar_S2E"
-                    {
-                        custom string isaac:nameOverride = "rear_2d_lidar"
-                        float omni:sensor:tickRate = 10
-                        uint omni:sensor:Core:scanRateBaseHz = 10
-                        bool omni:sensor:Core:accumulateOutputs = true
-                    }
-                    over "ROS_TF" (active = false) {}
-                    over "ROS_Lidar"
-                    {
-                        over "frameId"
-                        {
-                            custom string inputs:value = "rear_2d_lidar"
-                        }
-                        over "LaserScanPublish"
-                        {
-                            custom string inputs:topicName = "scan"
-                            custom bool inputs:fullScan = true
-                        }
-                    }
-                }
 
                 over "XT_32"
                 {
@@ -153,8 +105,6 @@ def Xform "World"
                 custom rel inputs:parentPrim = </World/Carter/chassis_link>
                 custom rel inputs:targetPrims = [
                     </World/Carter/chassis_link/sensors/XT_32/PandarXT_32_10hz>,
-                    </World/Carter/chassis_link/sensors/front_RPLidar/RPLidar_S2E>,
-                    </World/Carter/chassis_link/sensors/rear_RPLidar/RPLidar_S2E>,
                     </World/Carter/chassis_link/FrontCamera>,
                 ]
             }

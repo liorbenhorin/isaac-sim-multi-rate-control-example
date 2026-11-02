@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""300 Hz physics, a 30 Hz camera, 10 Hz lidars, and a main loop we own."""
+"""300 Hz physics, a 30 Hz camera, a 10 Hz lidar, and a main loop we own."""
 
 import time
 from pathlib import Path
@@ -37,7 +37,7 @@ from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.streaming.rtsp import RTSPStreamWriter
 from isaacsim.streaming.rtsp.impl.render_var_utils import ensure_render_var_on_product
 
-# The scene contains the robot, camera, and lidars with their ROS publishers.
+# The scene contains the robot, camera, and lidar with its ROS publisher.
 stage = omni.usd.get_context().get_stage()
 
 # Explicit stepping: rendering/app updates must not advance physics automatically.
@@ -64,7 +64,6 @@ set_camera_view(eye=[24, -22, 25], target=[8, 6, 0])  # Set once; GUI navigation
 
 print("300 Hz physics, 30 Hz camera: rtsp://localhost:8554/stream", flush=True)
 print("10 Hz XT-32 lidar: /front_3d_lidar/points (frame: front_3d_lidar)", flush=True)
-print("10 Hz 2D lidars: /front_2d_lidar/scan and /rear_2d_lidar/scan", flush=True)
 try:
     while app.is_running():
         started = time.monotonic()
